@@ -62,56 +62,6 @@ jobs:
           } >>"$GITHUB_OUTPUT"
           echo "### WordCraft v$v (\`${GITHUB_SHA::9}\`)" >>"$GITHUB_STEP_SUMMARY"
 
-  macos:
-    name: macOS universal
-    needs: version
-    runs-on: macos-15-xlarge  # M2 Pro larger runner; use only in release.yml (actions_macos_xl budget caps spend)
-    environment: release
-    env:
-      WORDCRAFT_VERSION: ${{ needs.version.outputs.version }}
-      WORDCRAFT_BUILD_DATE: ${{ needs.version.outputs.date }}
-    steps:
-      - uses: actions/checkout@v4
-      # Optional font input (docs: storytold/craft-fonts docs/integration.md); releases always embed it.
-      - name: Check out craft-fonts
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-        with:
-          repository: storytold/craft-fonts
-          ref: 8dcdacd5153e64560d109541a47d806f26f048c0
-          path: craft-fonts
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin, x86_64-apple-darwin
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: release-macos-universal
-      - name: Apply version override
-        if: inputs.version != ''
-        run: cargo xtask version set "$WORDCRAFT_VERSION"
-      - name: Import signing certificate
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: packaging/macos/import-cert.sh
-      - name: Build, sign, notarize
-        env:
-          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
-          CRAFT_FONTS_REQUIRED: "1"
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: packaging/macos/package.sh --arch universal
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-macos
-          path: dist/release/*
-          if-no-files-found: error
-      - name: Remove temporary keychain
-        if: always()
-        run: |
-          if [ -n "${MACOS_KEYCHAIN:-}" ]; then security delete-keychain "$MACOS_KEYCHAIN" || true; fi
-
   windows:
     name: Windows ${{ matrix.arch }}
     needs: version
@@ -377,7 +327,7 @@ jobs:
   release:
     name: Draft GitHub Release
     # Needs the signing jobs, which only run on `release`: a branch dry run never gets here.
-    needs: [version, macos, windows, linux, flatpak, freebsd, web]
+    needs: [version, windows, linux, flatpak, freebsd, web]
     runs-on: ubuntu-latest
     environment: release
     permissions:
